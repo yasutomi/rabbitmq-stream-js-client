@@ -1,7 +1,7 @@
 import { ConsumerFilter } from "./client"
 import { ConnectionInfo, Connection } from "./connection"
 import { ConnectionPool } from "./connection_pool"
-import { ConsumerCreditPolicy, defaultCreditPolicy } from "./consumer_credit_policy"
+import { ConsumerChunkCreditController, ConsumerCreditPolicy, defaultCreditPolicy } from "./consumer_credit_policy"
 import { Message } from "./publisher"
 import { Offset } from "./requests/subscribe_request"
 
@@ -128,6 +128,7 @@ export class StreamConsumer implements Consumer {
   private consumerHandle: ConsumerFunc
   private closed: boolean
   private singleActive: boolean = false
+  private chunkCreditController?: ConsumerChunkCreditController
 
   constructor(
     private pool: ConnectionPool,
@@ -140,6 +141,7 @@ export class StreamConsumer implements Consumer {
       consumerTag?: string
       offset: Offset
       creditPolicy?: ConsumerCreditPolicy
+      chunkCreditController?: ConsumerChunkCreditController
       singleActive?: boolean
       consumerUpdateListener?: ConsumerUpdateListener
     },
@@ -153,6 +155,7 @@ export class StreamConsumer implements Consumer {
     this.clientLocalOffset = this.offset.clone()
     this.connection.incrRefCount()
     this.creditsHandler = params.creditPolicy || defaultCreditPolicy
+    this.chunkCreditController = params.chunkCreditController
     this.consumerHandle = handle
     this.consumerUpdateListener = params.consumerUpdateListener
     this.closed = false
@@ -208,6 +211,8 @@ export class StreamConsumer implements Consumer {
   public get creditPolicy() {
     return this.creditsHandler
   }
+  public get creditController() { return this.chunkCreditController }
+  public get isClosed() { return this.closed }
 
   public get isSingleActive() {
     return this.singleActive

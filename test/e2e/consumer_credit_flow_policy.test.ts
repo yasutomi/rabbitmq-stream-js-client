@@ -5,7 +5,7 @@ import { Offset } from "../../src/requests/subscribe_request"
 import { createClient, createConsumerRef, createPublisher, createStreamName } from "../support/fake_data"
 import { Rabbit } from "../support/rabbit"
 import { always, eventually, mapSync, password, username, waitSleeping } from "../support/util"
-import { CreditRequestWrapper, creditsOnChunkCompleted, creditsOnChunkReceived } from "../../src/consumer_credit_policy"
+import { ConsumerChunkCreditController, CreditRequestWrapper, creditsOnChunkCompleted, creditsOnChunkReceived } from "../../src/consumer_credit_policy"
 import spies from "chai-spies"
 chaiUse(spies)
 
@@ -132,4 +132,36 @@ describe("consumer credit flow policies", () => {
     await always(() => expect(policy.onChunkCompleted).called.below(1 + 1), 5000)
     expect(invocationTimestamp).greaterThanOrEqual(lowerBoundTimestamp!)
   }).timeout(10000)
+
+  it("opt-in controller requests exactly one next credit after a handled chunk", async () => {
+    const requested: number[] = []
+    const controller: ConsumerChunkCreditController = {
+      initialCredit: 1,
+      shouldIssueNextCredit: async (context) => {
+        requested.push(context.chunkId)
+        return true
+      },
+    }
+    await client.declareConsumer(
+      { stream: streamName, offset: Offset.first(), chunkCreditController: controller },
+      messageHandler(0, 1)
+    )
+    await send(publisher, chunk)
+
+    await eventually(() => expect(received.length).eql(nMessages))
+    await eventually(() => expect(requested).eql([0]))
+    await always(() => expect(requested).eql([0]), 5000)
+  }).timeout(10000)
+
+  for (const invalidInitialCredit of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    it(`rejects invalid initial credit ${invalidInitialCredit}`, async () => {
+      const controller: ConsumerChunkCreditController = {
+        initialCredit: invalidInitialCredit,
+        shouldIssueNextCredit: async () => true,
+      }
+      await expect(
+        client.declareConsumer({ stream: streamName, offset: Offset.first(), chunkCreditController: controller }, async () => undefined)
+      ).to.be.rejectedWith("chunkCreditController.initialCredit must be a positive integer")
+    })
+  }
 })

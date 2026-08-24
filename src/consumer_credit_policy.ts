@@ -1,5 +1,21 @@
 export type CreditRequestWrapper = (howMany: number) => Promise<void>
 
+export interface ConsumerChunkCreditController {
+  readonly initialCredit: number
+  shouldIssueNextCredit(context: ChunkCompletionContext): boolean | Promise<boolean>
+  onFailure?(failure: ChunkCreditFailure): void | Promise<void>
+}
+
+export interface ChunkCompletionContext {
+  readonly consumerId: string
+  readonly chunkId: number
+  readonly generation: number
+}
+
+export interface ChunkCreditFailure extends ChunkCompletionContext {
+  readonly cause: unknown
+}
+
 export abstract class ConsumerCreditPolicy {
   constructor(protected readonly startFrom: number) {}
 

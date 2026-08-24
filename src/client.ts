@@ -42,7 +42,7 @@ import { UnsubscribeResponse } from "./responses/unsubscribe_response"
 import { SuperStreamConsumer, SuperStreamConsumerFunc } from "./super_stream_consumer"
 import { MessageKeyExtractorFunction, SuperStreamPublisher } from "./super_stream_publisher"
 import { DEFAULT_FRAME_MAX, REQUIRED_MANAGEMENT_VERSION, ResponseCode, sample, wait } from "./util"
-import { ConsumerCreditPolicy, CreditRequestWrapper, defaultCreditPolicy } from "./consumer_credit_policy"
+import { ConsumerChunkCreditController, ConsumerCreditPolicy, CreditRequestWrapper, defaultCreditPolicy } from "./consumer_credit_policy"
 import { PublishConfirmResponse } from "./responses/publish_confirm_response"
 import { PublishErrorResponse } from "./responses/publish_error_response"
 
@@ -85,6 +85,7 @@ type DeliverData = {
   subscriptionId: number
   consumerId: string
 }
+type ChunkCreditState = { generation: number; nextChunkId: number }
 
 /**
  * Main RabbitMQ Stream client for managing connections, publishers, and consumers.
@@ -119,6 +120,7 @@ export class Client {
   private compressions = new Map<CompressionType, Compression>()
   private locatorConnection: Connection
   private pool: ConnectionPool
+  private chunkCreditStates = new Map<string, ChunkCreditState>()
 
   private constructor(
     private readonly logger: Logger,
@@ -324,6 +326,9 @@ export class Client {
     handle: ConsumerFunc,
     superStreamConsumer?: SuperStreamConsumer
   ): Promise<Consumer> {
+    if (params.chunkCreditController && (!Number.isInteger(params.chunkCreditController.initialCredit) || params.chunkCreditController.initialCredit < 1)) {
+      throw new Error("chunkCreditController.initialCredit must be a positive integer")
+    }
     const connection = await this.getConnection(params.stream, "consumer", params.connectionClosedListener)
     const consumerId = connection.getNextConsumerId()
 
@@ -342,6 +347,7 @@ export class Client {
         consumerTag: params.consumerTag,
         offset: params.offset,
         creditPolicy: params.creditPolicy,
+        chunkCreditController: params.chunkCreditController,
         singleActive: params.singleActive,
         consumerUpdateListener: params.consumerUpdateListener,
       },
@@ -703,7 +709,7 @@ export class Client {
       new SubscribeRequest({
         ...params,
         subscriptionId: consumerId,
-        credit: creditPolicy.onSubscription(),
+        credit: params.chunkCreditController?.initialCredit ?? creditPolicy.onSubscription(),
         properties: properties,
       })
     )
@@ -757,8 +763,11 @@ export class Client {
     this.logger.debug(`on delivery -> ${consumer.consumerRef}`)
     this.logger.debug(`response.messages.length: ${messages.length}`)
 
+    const creditState = this.chunkCreditStates.get(consumerId) ?? { generation: 0, nextChunkId: 0 }
+    this.chunkCreditStates.set(consumerId, creditState)
     const creditRequestWrapper = this.askForCredit(subscriptionId, connection)
-    await consumer.creditPolicy.onChunkReceived(creditRequestWrapper)
+    const controller = consumer.creditController
+    if (!controller) await consumer.creditPolicy.onChunkReceived(creditRequestWrapper)
     const messageFilter =
       messageFilteringSupported && consumer.filter?.postFilterFunc
         ? consumer.filter?.postFilterFunc
@@ -770,7 +779,15 @@ export class Client {
       }
     }
 
-    await consumer.creditPolicy.onChunkCompleted(creditRequestWrapper)
+    if (!controller) return consumer.creditPolicy.onChunkCompleted(creditRequestWrapper)
+    const context = { consumerId, chunkId: creditState.nextChunkId++, generation: creditState.generation }
+    try {
+      if (await controller.shouldIssueNextCredit(context)) {
+        if (this.consumers.get(consumerId)?.consumer === consumer && !consumer.isClosed && this.chunkCreditStates.get(consumerId) === creditState && creditState.generation === context.generation) await creditRequestWrapper(1)
+      }
+    } catch (cause) {
+      try { await controller.onFailure?.({ ...context, cause }) } catch (_error) {}
+    }
   }
 
   private getConsumerUpdateCallback(connectionId: string) {
@@ -925,6 +942,7 @@ export class Client {
   private async closing(consumer: StreamConsumer, extendedConsumerId: string) {
     await consumer.close()
     this.consumers.delete(extendedConsumerId)
+    this.chunkCreditStates.delete(extendedConsumerId)
     this.logger.info(`Closed consumer with id: ${extendedConsumerId}`)
   }
 
@@ -1063,6 +1081,7 @@ export interface DeclareConsumerParams {
   singleActive?: boolean
   filter?: ConsumerFilter
   creditPolicy?: ConsumerCreditPolicy
+  chunkCreditController?: ConsumerChunkCreditController
   consumerTag?: string
 }
 
