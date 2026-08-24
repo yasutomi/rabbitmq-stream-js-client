@@ -185,12 +185,15 @@ describe("consumer credit flow policies", () => {
     )
     await send(publisher, [{ content: Buffer.from("before-restart") }])
     await eventually(() => expect(generations).eql([0]))
+    await eventually(() => expect(received).to.have.length(1))
+    await send(publisher, [{ content: Buffer.from("waiting") }])
 
     const restarting = client.restart()
     resolvePermit(true)
+    await waitSleeping(500)
+    expect(received).to.have.length(1)
     await restarting
-    await publisher.send(Buffer.from("after-restart"))
-    await publisher.flush()
+    await eventually(() => expect(received).to.have.length(2))
     await eventually(() => expect(generations).eql([0, 1]))
   }).timeout(20000)
 })
