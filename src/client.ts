@@ -601,6 +601,10 @@ export class Client {
    * ```
    */
   public async restart() {
+    for (const { consumer } of this.consumers.values()) {
+      const creditState = this.chunkCreditStates.get(consumer.extendedId)
+      if (creditState) creditState.generation += 1
+    }
     this.logger.info(`Restarting client connection ${this.locatorConnection.connectionId}`)
     const uniqueConnectionIds = new Set<string>()
     uniqueConnectionIds.add(this.locatorConnection.connectionId)
@@ -609,8 +613,6 @@ export class Client {
     await this.locatorConnection.restart()
 
     for (const { consumer, connection, params } of this.consumers.values()) {
-      const creditState = this.chunkCreditStates.get(consumer.extendedId)
-      if (creditState) creditState.generation += 1
       if (!uniqueConnectionIds.has(connection.connectionId)) {
         this.logger.info(`Restarting consumer connection ${connection.connectionId}`)
         await connection.restart()
