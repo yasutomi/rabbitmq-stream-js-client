@@ -2,4 +2,8 @@ export * from "./client"
 export { Publisher } from "./publisher"
 export { Consumer } from "./consumer"
 export { Offset } from "./requests/subscribe_request"
-export type { ChunkCompletionContext, ChunkCreditFailure, ConsumerChunkCreditController } from "./consumer_credit_policy"
+export type {
+  ChunkCompletionContext,
+  ChunkCreditFailure,
+  ConsumerChunkCreditController,
+} from "./consumer_credit_policy"

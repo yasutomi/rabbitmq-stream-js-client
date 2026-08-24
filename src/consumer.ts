@@ -211,8 +211,12 @@ export class StreamConsumer implements Consumer {
   public get creditPolicy() {
     return this.creditsHandler
   }
-  public get creditController() { return this.chunkCreditController }
-  public get isClosed() { return this.closed }
+  public get creditController() {
+    return this.chunkCreditController
+  }
+  public get isClosed() {
+    return this.closed
+  }
 
   public get isSingleActive() {
     return this.singleActive

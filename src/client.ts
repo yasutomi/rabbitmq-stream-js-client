@@ -42,7 +42,12 @@ import { UnsubscribeResponse } from "./responses/unsubscribe_response"
 import { SuperStreamConsumer, SuperStreamConsumerFunc } from "./super_stream_consumer"
 import { MessageKeyExtractorFunction, SuperStreamPublisher } from "./super_stream_publisher"
 import { DEFAULT_FRAME_MAX, REQUIRED_MANAGEMENT_VERSION, ResponseCode, sample, wait } from "./util"
-import { ConsumerChunkCreditController, ConsumerCreditPolicy, CreditRequestWrapper, defaultCreditPolicy } from "./consumer_credit_policy"
+import {
+  ConsumerChunkCreditController,
+  ConsumerCreditPolicy,
+  CreditRequestWrapper,
+  defaultCreditPolicy,
+} from "./consumer_credit_policy"
 import { PublishConfirmResponse } from "./responses/publish_confirm_response"
 import { PublishErrorResponse } from "./responses/publish_error_response"
 
@@ -326,7 +331,10 @@ export class Client {
     handle: ConsumerFunc,
     superStreamConsumer?: SuperStreamConsumer
   ): Promise<Consumer> {
-    if (params.chunkCreditController && (!Number.isInteger(params.chunkCreditController.initialCredit) || params.chunkCreditController.initialCredit < 1)) {
+    if (
+      params.chunkCreditController &&
+      (!Number.isInteger(params.chunkCreditController.initialCredit) || params.chunkCreditController.initialCredit < 1)
+    ) {
       throw new Error("chunkCreditController.initialCredit must be a positive integer")
     }
     const connection = await this.getConnection(params.stream, "consumer", params.connectionClosedListener)
@@ -787,10 +795,18 @@ export class Client {
     const context = { consumerId, chunkId: creditState.nextChunkId++, generation: creditState.generation }
     try {
       if (await controller.shouldIssueNextCredit(context)) {
-        if (this.consumers.get(consumerId)?.consumer === consumer && !consumer.isClosed && this.chunkCreditStates.get(consumerId) === creditState && creditState.generation === context.generation) await creditRequestWrapper(1)
+        if (
+          this.consumers.get(consumerId)?.consumer === consumer &&
+          !consumer.isClosed &&
+          this.chunkCreditStates.get(consumerId) === creditState &&
+          creditState.generation === context.generation
+        )
+          await creditRequestWrapper(1)
       }
     } catch (cause) {
-      try { await controller.onFailure?.({ ...context, cause }) } catch (_error) {}
+      try {
+        await controller.onFailure?.({ ...context, cause })
+      } catch (_error) {}
     }
   }
 

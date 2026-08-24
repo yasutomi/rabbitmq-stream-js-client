@@ -5,7 +5,12 @@ import { Offset } from "../../src/requests/subscribe_request"
 import { createClient, createConsumerRef, createPublisher, createStreamName } from "../support/fake_data"
 import { Rabbit } from "../support/rabbit"
 import { always, eventually, mapSync, password, username, waitSleeping } from "../support/util"
-import { ConsumerChunkCreditController, CreditRequestWrapper, creditsOnChunkCompleted, creditsOnChunkReceived } from "../../src/consumer_credit_policy"
+import {
+  ConsumerChunkCreditController,
+  CreditRequestWrapper,
+  creditsOnChunkCompleted,
+  creditsOnChunkReceived,
+} from "../../src/consumer_credit_policy"
 import spies from "chai-spies"
 chaiUse(spies)
 
@@ -160,14 +165,19 @@ describe("consumer credit flow policies", () => {
         shouldIssueNextCredit: async () => true,
       }
       await expect(
-        client.declareConsumer({ stream: streamName, offset: Offset.first(), chunkCreditController: controller }, async () => undefined)
+        client.declareConsumer(
+          { stream: streamName, offset: Offset.first(), chunkCreditController: controller },
+          async () => undefined
+        )
       ).to.be.rejectedWith("chunkCreditController.initialCredit must be a positive integer")
     })
   }
 
   it("does not use an old hook completion to issue credit after restart", async () => {
     let resolvePermit!: (value: boolean) => void
-    const permit = new Promise<boolean>((resolve) => { resolvePermit = resolve })
+    const permit = new Promise<boolean>((resolve) => {
+      resolvePermit = resolve
+    })
     const generations: number[] = []
     await client.declareConsumer(
       {
@@ -181,7 +191,9 @@ describe("consumer credit flow policies", () => {
           },
         },
       },
-      async (message) => { received.push(message) }
+      async (message) => {
+        received.push(message)
+      }
     )
     await send(publisher, [{ content: Buffer.from("before-restart") }])
     await eventually(() => expect(generations).eql([0]))
@@ -195,7 +207,9 @@ describe("consumer credit flow policies", () => {
     await eventually(() => expect(received.length).to.be.greaterThanOrEqual(2))
     await eventually(() => {
       expect(generations[0]).eql(0)
-      expect(generations.slice(1)).to.satisfy((values: number[]) => values.length >= 1 && values.every((value) => value === 1))
+      expect(generations.slice(1)).to.satisfy(
+        (values: number[]) => values.length >= 1 && values.every((value) => value === 1)
+      )
     })
   }).timeout(20000)
 })
