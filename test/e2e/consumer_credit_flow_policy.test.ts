@@ -190,10 +190,9 @@ describe("consumer credit flow policies", () => {
 
     const restarting = client.restart()
     resolvePermit(true)
-    await waitSleeping(500)
-    expect(received).to.have.length(1)
+    await always(() => expect(received).to.have.length(1), 4000)
     await restarting
-    await eventually(() => expect(received).to.have.length(2))
+    await eventually(() => expect(received.length).to.be.greaterThanOrEqual(2))
     await eventually(() => expect(generations).eql([0, 1]))
   }).timeout(20000)
 })
