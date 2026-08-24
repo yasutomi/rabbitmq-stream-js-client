@@ -164,4 +164,33 @@ describe("consumer credit flow policies", () => {
       ).to.be.rejectedWith("chunkCreditController.initialCredit must be a positive integer")
     })
   }
+
+  it("does not use an old hook completion to issue credit after restart", async () => {
+    let resolvePermit!: (value: boolean) => void
+    const permit = new Promise<boolean>((resolve) => { resolvePermit = resolve })
+    const generations: number[] = []
+    await client.declareConsumer(
+      {
+        stream: streamName,
+        offset: Offset.first(),
+        chunkCreditController: {
+          initialCredit: 1,
+          shouldIssueNextCredit: async (context) => {
+            generations.push(context.generation)
+            return permit
+          },
+        },
+      },
+      async (message) => { received.push(message) }
+    )
+    await send(publisher, [{ content: Buffer.from("before-restart") }])
+    await eventually(() => expect(generations).eql([0]))
+
+    const restarting = client.restart()
+    resolvePermit(true)
+    await restarting
+    await publisher.send(Buffer.from("after-restart"))
+    await publisher.flush()
+    await eventually(() => expect(generations).eql([0, 1]))
+  }).timeout(20000)
 })
