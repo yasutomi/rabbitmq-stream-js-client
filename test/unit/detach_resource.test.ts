@@ -198,6 +198,33 @@ describe("Stream resource close", () => {
     await graceful
   })
 
+  it("does not flush after the publisher was already released locally", async () => {
+    const { connection, pool, released, freedPublisherIds } = closeDependencies()
+    const publisher = new StreamPublisher(
+      pool,
+      {
+        connection,
+        logger: { debug: () => undefined, error: () => undefined, info: () => undefined, warn: () => undefined },
+        maxFrameSize: 0,
+        publisherId: 1,
+        stream: "stream",
+      },
+      0n
+    )
+    let flushes = 0
+    publisher.flush = async () => {
+      flushes += 1
+      throw new Error("released connection")
+    }
+
+    await publisher.localClose()
+    await publisher.close()
+
+    expect(flushes).to.equal(0)
+    expect(released.count).to.equal(1)
+    expect(freedPublisherIds.count).to.equal(1)
+  })
+
   it("releases consumer IDs and pooled connections once across concurrent close paths", async () => {
     const { connection, pool, released, freedConsumerIds } = closeDependencies()
     const consumer = new StreamConsumer(pool, () => undefined, {

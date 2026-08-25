@@ -383,11 +383,13 @@ export class StreamPublisher implements Publisher {
 
   public close(): Promise<void> {
     this._closed = true
+    if (this.releasePromise && !this.gracefulClosePromise) return this.releasePromise
     return (this.gracefulClosePromise ??= this.flushThenRelease(true))
   }
 
   public automaticClose(): Promise<void> {
     this._closed = true
+    if (this.releasePromise && !this.gracefulClosePromise) return this.releasePromise
     return (this.gracefulClosePromise ??= this.flushThenRelease(false))
   }
 
