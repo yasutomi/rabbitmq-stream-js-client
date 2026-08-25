@@ -188,7 +188,8 @@ export class Client {
     } catch (error) {
       failures.push(error)
     }
-    if (failures.length > 0) throw new AggregateError(failures, "Failed to close RabbitMQ stream client")
+    if (failures.length === 1) throw failures[0]
+    if (failures.length > 1) throw new AggregateError(failures, "Failed to close RabbitMQ stream client")
   }
 
   /**
