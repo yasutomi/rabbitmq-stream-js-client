@@ -90,11 +90,22 @@ export class Rabbit {
   }
 
   async closeConnection(name: string) {
-    return got.delete(`http://${this.firstNode.host}:${this.port}/api/connections/${name}`, {
+    return got.delete(`http://${this.firstNode.host}:${this.port}/api/connections/${encodeURIComponent(name)}`, {
       username: this.username,
       password: this.password,
       responseType: "json",
     })
+  }
+
+  async closeStreamConnection(name: string) {
+    return got.delete(
+      `http://${this.firstNode.host}:${this.port}/api/stream/connections/%2F/${encodeURIComponent(name)}`,
+      {
+        username: this.username,
+        password: this.password,
+        responseType: "json",
+      }
+    )
   }
 
   async getQueueInfo(queue: string): Promise<MessageInfoResponse> {
@@ -221,6 +232,18 @@ export class Rabbit {
       }
     )
     return resp.body.map((p) => p.consumer_tag)
+  }
+
+  async getConsumers(): Promise<RabbitConsumersResponse[]> {
+    const resp = await got.get<RabbitConsumersResponse[]>(
+      `http://${this.firstNode.host}:${this.port}/api/consumers/%2F/`,
+      {
+        username: this.username,
+        password: this.password,
+        responseType: "json",
+      }
+    )
+    return resp.body
   }
 
   async returnConsumersIdentifiers(): Promise<string[]> {

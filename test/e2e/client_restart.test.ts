@@ -100,6 +100,62 @@ describe("restart connections", () => {
     expect(client.consumerCounts()).eql(0)
   }).timeout(10000)
 
+  it("does not redeclare detached resources after broker-triggered recovery", async () => {
+    let recovery: Promise<void> | undefined
+    await client.close()
+    client = await createClient(username, password, {
+      connection_closed: () => {
+        recovery ??= client.restart()
+      },
+    })
+    const publisherRef = `detached-publisher-${randomUUID()}`
+    const consumerRef = `detached-consumer-${randomUUID()}`
+    let detachedConsumerDeliveries = 0
+    const publisher = await client.declarePublisher({ publisherRef, stream: streamName })
+    const consumer = await client.declareConsumer(
+      {
+        connectionClosedListener: () => {
+          recovery ??= client.restart()
+        },
+        consumerRef,
+        offset: Offset.next(),
+        stream: streamName,
+      },
+      () => {
+        detachedConsumerDeliveries += 1
+      }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+    const consumerConnection = (await rabbit.getConsumers()).find(({ queue }) => queue.name === streamName)
+    expect(consumerConnection).not.undefined
+
+    await rabbit.closeStreamConnection(consumerConnection!.channel_details.connection_name)
+    await eventually(() => expect(recovery).not.undefined)
+    await client.detachPublisher(publisher)
+    await client.detachConsumer(consumer)
+    await recovery
+
+    expect(client.publisherCounts()).eql(0)
+    expect(client.consumerCounts()).eql(0)
+    await expect(publisher.send(Buffer.from("detached"))).to.be.rejectedWith("closed")
+    await eventually(async () => {
+      expect(await rabbit.returnPublishers(streamName)).not.include(publisherRef)
+      expect(await rabbit.returnConsumersIdentifiers()).not.include(consumerRef)
+    })
+
+    const replacementReceived = new Set<string>()
+    await client.declareConsumer({ offset: Offset.next(), stream: streamName }, (message) => {
+      replacementReceived.add(message.content.toString())
+    })
+    const replacementPublisher = await client.declarePublisher({ stream: streamName })
+    await replacementPublisher.send(Buffer.from("replacement"))
+    await replacementPublisher.flush()
+    await eventually(() => {
+      expect(detachedConsumerDeliveries).eql(0)
+      expect(replacementReceived.has("replacement")).true
+    })
+  }).timeout(20000)
+
   it("sending and receiving messages is not affected", async () => {
     const received = new Set<string>()
     const messageNumber = 10000

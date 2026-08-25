@@ -1,7 +1,7 @@
 import { expect } from "chai"
 import { Client } from "../../src"
-import type { Consumer } from "../../src/consumer"
-import type { Publisher } from "../../src/publisher"
+import { StreamConsumer, type Consumer } from "../../src/consumer"
+import { StreamPublisher, type Publisher } from "../../src/publisher"
 
 describe("Client detachPublisher", () => {
   it("does not detach a replacement that reuses the old extended ID", async () => {
@@ -50,6 +50,75 @@ describe("Client detachConsumer", () => {
     expect(client.consumers.has(extendedId)).to.equal(false)
     expect(client.chunkCreditStates.has(extendedId)).to.equal(false)
     expect(unregisters).to.equal(1)
+  })
+
+  it("does not detach a replacement that reuses the old extended ID", async () => {
+    const extendedId = "2@connection"
+    let unregisters = 0
+    const c1 = closeableConsumer(extendedId)
+    const c2 = closeableConsumer(extendedId)
+    const client = Object.create(Client.prototype) as unknown as {
+      chunkCreditStates: Map<string, unknown>
+      consumers: Map<string, { consumer: Consumer; connection: { unregisterForCloseConsumer(id: string): void } }>
+      detachConsumer(consumer: Consumer): Promise<void>
+    }
+    client.chunkCreditStates = new Map([[extendedId, {}]])
+    client.consumers = new Map([
+      [extendedId, { consumer: c1, connection: { unregisterForCloseConsumer: () => unregisters++ } }],
+    ])
+
+    await client.detachConsumer(c1)
+    client.consumers.set(extendedId, {
+      consumer: c2,
+      connection: { unregisterForCloseConsumer: () => unregisters++ },
+    })
+    await client.detachConsumer(c1)
+
+    expect(client.consumers.get(extendedId)?.consumer).to.equal(c2)
+    expect(unregisters).to.equal(1)
+    expect(c1.closeCalls()).to.equal(1)
+  })
+})
+
+describe("Stream resource close", () => {
+  it("releases publisher IDs and pooled connections once across concurrent close paths", async () => {
+    const { connection, pool, released, freedPublisherIds } = closeDependencies()
+    const publisher = new StreamPublisher(
+      pool,
+      {
+        connection,
+        logger: {
+          debug: () => undefined,
+          error: () => undefined,
+          info: () => undefined,
+          warn: () => undefined,
+        },
+        maxFrameSize: 0,
+        publisherId: 1,
+        stream: "stream",
+      },
+      0n
+    )
+
+    await Promise.all([publisher.close(), publisher.automaticClose(), publisher.close()])
+
+    expect(released.count).to.equal(1)
+    expect(freedPublisherIds.count).to.equal(1)
+  })
+
+  it("releases consumer IDs and pooled connections once across concurrent close paths", async () => {
+    const { connection, pool, released, freedConsumerIds } = closeDependencies()
+    const consumer = new StreamConsumer(pool, () => undefined, {
+      connection,
+      consumerId: 2,
+      offset: { clone: () => ({ value: 0n }), type: "offset", value: 0n } as never,
+      stream: "stream",
+    })
+
+    await Promise.all([consumer.close(), consumer.automaticClose(), consumer.close()])
+
+    expect(released.count).to.equal(1)
+    expect(freedConsumerIds.count).to.equal(1)
   })
 })
 
@@ -229,6 +298,44 @@ function closeablePublisher(extendedId: string): Publisher & { closeCalls(): num
 
 function failingPublisher(extendedId: string, failure: Error): Publisher {
   return { ...closeablePublisher(extendedId), close: () => Promise.reject(failure) }
+}
+
+function closeableConsumer(extendedId: string): Consumer & { closeCalls(): number } {
+  let calls = 0
+  let closePromise: Promise<void> | undefined
+  return {
+    close: () =>
+      (closePromise ??= Promise.resolve().then(() => {
+        calls += 1
+      })),
+    consumerId: 2,
+    extendedId,
+    getConnectionInfo: () => ({ host: "localhost", id: "connection", port: 5552, ready: true, vhost: "/" }),
+    getOffset: () => 0n,
+    queryOffset: async () => 0n,
+    storeOffset: async () => undefined,
+    updateConsumerOffset: () => undefined,
+    closeCalls: () => calls,
+  }
+}
+
+function closeDependencies() {
+  const released = { count: 0 }
+  const freedPublisherIds = { count: 0 }
+  const freedConsumerIds = { count: 0 }
+  const connection = {
+    connectionId: "connection",
+    freeConsumerId: () => freedConsumerIds.count++,
+    freePublisherId: () => freedPublisherIds.count++,
+    incrRefCount: () => undefined,
+    ready: false,
+  }
+  const pool = {
+    releaseConnection: async () => {
+      released.count++
+    },
+  }
+  return { connection: connection as never, freedConsumerIds, freedPublisherIds, pool: pool as never, released }
 }
 
 function deferred<T>() {

@@ -36,13 +36,15 @@ export class ConnectionPool {
 
   public async releaseConnection(connection: Connection, manuallyClose = true): Promise<void> {
     connection.decrRefCount()
-    if (connection.refCount <= 0 && connection.ready) {
-      try {
-        await connection.close({ closingCode: 0, closingReason: "", manuallyClose })
-      } catch (e) {
-        // in case the client is closed immediately after a consumer, its connection has still not
-        // reset the ready flag, so we get an "Error: write after end"
-        this.log.warn(`Could not close connection: ${inspect(e)}`)
+    if (connection.refCount <= 0) {
+      if (connection.ready) {
+        try {
+          await connection.close({ closingCode: 0, closingReason: "", manuallyClose })
+        } catch (e) {
+          // in case the client is closed immediately after a consumer, its connection has still not
+          // reset the ready flag, so we get an "Error: write after end"
+          this.log.warn(`Could not close connection: ${inspect(e)}`)
+        }
       }
       this.removeCachedConnection(connection)
     }
