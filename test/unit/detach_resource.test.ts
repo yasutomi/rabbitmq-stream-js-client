@@ -108,6 +108,34 @@ describe("Stream resource close", () => {
     expect(freedPublisherIds.count).to.equal(1)
   })
 
+  it("releases publisher IDs and pooled connections when flush fails", async () => {
+    const { connection, pool, released, freedPublisherIds } = closeDependencies()
+    const publisher = new StreamPublisher(
+      pool,
+      {
+        connection,
+        logger: {
+          debug: () => undefined,
+          error: () => undefined,
+          info: () => undefined,
+          warn: () => undefined,
+        },
+        maxFrameSize: 0,
+        publisherId: 1,
+        stream: "stream",
+      },
+      0n
+    )
+    const failure = new Error("socket ended")
+    publisher.flush = async () => {
+      throw failure
+    }
+
+    await expect(publisher.close()).to.be.rejectedWith(failure)
+    expect(released.count).to.equal(1)
+    expect(freedPublisherIds.count).to.equal(1)
+  })
+
   it("releases consumer IDs and pooled connections once across concurrent close paths", async () => {
     const { connection, pool, released, freedConsumerIds } = closeDependencies()
     const consumer = new StreamConsumer(pool, () => undefined, {

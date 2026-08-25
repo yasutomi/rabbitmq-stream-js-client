@@ -392,9 +392,23 @@ export class StreamPublisher implements Publisher {
     const wasClosed = this._closed
     this._closed = true
     if (!wasClosed) {
-      await this.flush()
-      await this.pool.releaseConnection(this.connection, releaseConnection)
-      this.connection.freePublisherId(this.publisherId)
+      const failures: unknown[] = []
+      try {
+        await this.flush()
+      } catch (cause) {
+        failures.push(cause)
+      }
+      try {
+        await this.pool.releaseConnection(this.connection, releaseConnection)
+      } catch (cause) {
+        failures.push(cause)
+      } finally {
+        this.connection.freePublisherId(this.publisherId)
+      }
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) {
+        throw new AggregateError(failures, "Failed to close Stream publisher")
+      }
     }
   }
 
