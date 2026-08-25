@@ -264,8 +264,7 @@ export class Client {
     }
     const publisher = new StreamPublisher(this.pool, streamPublisherParams, lastPublishingId, filter)
     connection.registerForClosePublisher(publisher.extendedId, params.stream, async () => {
-      await publisher.automaticClose()
-      this.publishers.delete(publisher.extendedId)
+      await this.detachPublisherInternal(publisher, true)
     })
     this.publishers.set(publisher.extendedId, { publisher, connection, params, filter })
     this.logger.info(
@@ -284,10 +283,24 @@ export class Client {
     if (!res.ok) {
       throw new Error(`Delete Publisher command returned error with code ${res.code} - ${errorMessageOf(res.code)}`)
     }
-    await publisher?.close()
-    this.publishers.delete(extendedPublisherId)
+    if (publisher) await this.detachPublisher(publisher)
     this.logger.info(`deleted publisher with publishing id ${publisherId}`)
     return res.ok
+  }
+
+  public detachPublisher(publisher: Publisher): Promise<void> {
+    return this.detachPublisherInternal(publisher, false)
+  }
+
+  private detachPublisherInternal(publisher: Publisher, automatic: boolean): Promise<void> {
+    const entry = this.publishers.get(publisher.extendedId)
+    if (entry?.publisher === publisher) {
+      this.publishers.delete(publisher.extendedId)
+      entry.connection.unregisterForClosePublisher(publisher.extendedId)
+    }
+    return automatic
+      ? (publisher as Publisher & { automaticClose(): Promise<void> }).automaticClose()
+      : publisher.close()
   }
 
   /**
@@ -365,7 +378,7 @@ export class Client {
       if (params.connectionClosedListener) {
         params.connectionClosedListener(false)
       }
-      await this.closeConsumer(consumer.extendedId)
+      await this.detachConsumerInternal(consumer, true)
     })
     this.consumers.set(consumer.extendedId, { connection, consumer, params })
     await this.declareConsumerOnConnection(params, consumerId, connection, superStreamConsumer?.superStream)
@@ -389,8 +402,22 @@ export class Client {
     if (streamInfos.length > 0 && streamExists(streamInfos[0])) {
       await this.unsubscribe(activeConsumer.connection, consumerId)
     }
-    await this.closing(activeConsumer.consumer, extendedConsumerId)
+    await this.detachConsumer(activeConsumer.consumer)
     return true
+  }
+
+  public detachConsumer(consumer: Consumer): Promise<void> {
+    return this.detachConsumerInternal(consumer, false)
+  }
+
+  private detachConsumerInternal(consumer: Consumer, automatic: boolean): Promise<void> {
+    const entry = this.consumers.get(consumer.extendedId)
+    if (entry?.consumer === consumer) {
+      this.consumers.delete(consumer.extendedId)
+      this.chunkCreditStates.delete(consumer.extendedId)
+      entry.connection.unregisterForCloseConsumer(consumer.extendedId)
+    }
+    return automatic ? (consumer as Consumer & { automaticClose(): Promise<void> }).automaticClose() : consumer.close()
   }
 
   /**
@@ -620,21 +647,25 @@ export class Client {
     await wait(5000)
     await this.locatorConnection.restart()
 
-    for (const { consumer, connection, params } of this.consumers.values()) {
+    for (const [extendedId, value] of this.consumers) {
+      const { consumer, connection, params } = value
       if (!uniqueConnectionIds.has(connection.connectionId)) {
         this.logger.info(`Restarting consumer connection ${connection.connectionId}`)
         await connection.restart()
       }
+      if (this.consumers.get(extendedId) !== value) continue
       uniqueConnectionIds.add(connection.connectionId)
       const consumerParams = { ...params, offset: Offset.offset(consumer.getOffset()) }
       await this.declareConsumerOnConnection(consumerParams, consumer.consumerId, connection)
     }
 
-    for (const { publisher, connection, params, filter } of this.publishers.values()) {
+    for (const [extendedId, value] of this.publishers) {
+      const { publisher, connection, params, filter } = value
       if (!uniqueConnectionIds.has(connection.connectionId)) {
         this.logger.info(`Restarting publisher connection ${connection.connectionId}`)
         await connection.restart()
       }
+      if (this.publishers.get(extendedId) !== value) continue
       uniqueConnectionIds.add(connection.connectionId)
       await this.declarePublisherOnConnection(params, publisher.publisherId, connection, filter)
     }
@@ -957,13 +988,6 @@ export class Client {
       throw new Error(`Unsubscribe command returned error with code ${res.code} - ${errorMessageOf(res.code)}`)
     }
     return res
-  }
-
-  private async closing(consumer: StreamConsumer, extendedConsumerId: string) {
-    await consumer.close()
-    this.consumers.delete(extendedConsumerId)
-    this.chunkCreditStates.delete(extendedConsumerId)
-    this.logger.info(`Closed consumer with id: ${extendedConsumerId}`)
   }
 
   /**

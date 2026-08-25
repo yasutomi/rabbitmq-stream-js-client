@@ -272,6 +272,7 @@ export class StreamPublisher implements Publisher {
   private logger: Logger
   private maxChunkLength: number
   private _closed = false
+  private closePromise?: Promise<void>
 
   constructor(
     private pool: ConnectionPool,
@@ -379,22 +380,22 @@ export class StreamPublisher implements Publisher {
     return this.publisherRef
   }
 
-  public async close(): Promise<void> {
-    if (!this.closed) {
-      await this.flush()
-      await this.pool.releaseConnection(this.connection, true)
-      this.connection.freePublisherId(this.publisherId)
-    }
-    this._closed = true
+  public close(): Promise<void> {
+    return (this.closePromise ??= this.closeInternal(true))
   }
 
-  public async automaticClose(): Promise<void> {
-    if (!this.closed) {
+  public automaticClose(): Promise<void> {
+    return (this.closePromise ??= this.closeInternal(false))
+  }
+
+  private async closeInternal(releaseConnection: boolean): Promise<void> {
+    const wasClosed = this._closed
+    this._closed = true
+    if (!wasClosed) {
       await this.flush()
-      await this.pool.releaseConnection(this.connection, false)
+      await this.pool.releaseConnection(this.connection, releaseConnection)
       this.connection.freePublisherId(this.publisherId)
     }
-    this._closed = true
   }
 
   public get streamName(): string {

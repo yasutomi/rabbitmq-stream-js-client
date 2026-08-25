@@ -127,6 +127,7 @@ export class StreamConsumer implements Consumer {
   private creditsHandler: ConsumerCreditPolicy
   private consumerHandle: ConsumerFunc
   private closed: boolean
+  private closePromise?: Promise<void>
   private singleActive: boolean = false
   private chunkCreditController?: ConsumerChunkCreditController
 
@@ -162,15 +163,17 @@ export class StreamConsumer implements Consumer {
     this.singleActive = params.singleActive ?? false
   }
 
-  async close(): Promise<void> {
-    this.closed = true
-    await this.pool.releaseConnection(this.connection, true)
-    this.connection.freeConsumerId(this.consumerId)
+  close(): Promise<void> {
+    return (this.closePromise ??= this.closeInternal(true))
   }
 
-  async automaticClose(): Promise<void> {
+  automaticClose(): Promise<void> {
+    return (this.closePromise ??= this.closeInternal(false))
+  }
+
+  private async closeInternal(releaseConnection: boolean): Promise<void> {
     this.closed = true
-    await this.pool.releaseConnection(this.connection, false)
+    await this.pool.releaseConnection(this.connection, releaseConnection)
     this.connection.freeConsumerId(this.consumerId)
   }
 

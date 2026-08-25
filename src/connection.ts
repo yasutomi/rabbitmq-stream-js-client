@@ -351,6 +351,11 @@ export class Connection {
     this.closeEventsEmitter.once(`close_publisher_${publisherExtendedId}`, callback)
   }
 
+  public unregisterForClosePublisher(publisherExtendedId: string) {
+    this.publisherListeners = this.publisherListeners.filter((listener) => listener.extendedId !== publisherExtendedId)
+    this.closeEventsEmitter.removeAllListeners(`close_publisher_${publisherExtendedId}`)
+  }
+
   public registerForCloseConsumer(
     consumerExtendedId: string,
     streamName: string,
@@ -358,6 +363,11 @@ export class Connection {
   ) {
     this.consumerListeners.push({ extendedId: consumerExtendedId, stream: streamName })
     this.closeEventsEmitter.once(`close_consumer_${consumerExtendedId}`, callback)
+  }
+
+  public unregisterForCloseConsumer(consumerExtendedId: string) {
+    this.consumerListeners = this.consumerListeners.filter((listener) => listener.extendedId !== consumerExtendedId)
+    this.closeEventsEmitter.removeAllListeners(`close_consumer_${consumerExtendedId}`)
   }
 
   private registerListeners(listeners?: ConnectionListenersParams) {
