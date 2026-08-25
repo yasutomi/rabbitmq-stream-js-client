@@ -1,5 +1,7 @@
 import { expect } from "chai"
+import EventEmitter from "events"
 import { Client } from "../../src"
+import { Connection } from "../../src/connection"
 import { StreamConsumer, type Consumer } from "../../src/consumer"
 import { StreamPublisher, type Publisher } from "../../src/publisher"
 
@@ -119,6 +121,38 @@ describe("Stream resource close", () => {
 
     expect(released.count).to.equal(1)
     expect(freedConsumerIds.count).to.equal(1)
+  })
+})
+
+describe("Connection detach callback removal", () => {
+  it("does not invoke removed publisher or consumer automatic-close callbacks", () => {
+    const publisherId = "1@connection"
+    const consumerId = "2@connection"
+    let publisherCloses = 0
+    let consumerCloses = 0
+    const emitter = new EventEmitter()
+    const connection = Object.create(Connection.prototype) as unknown as {
+      closeEventsEmitter: EventEmitter
+      consumerListeners: unknown[]
+      publisherListeners: unknown[]
+      unregisterForCloseConsumer(extendedId: string): void
+      unregisterForClosePublisher(extendedId: string): void
+    }
+    connection.closeEventsEmitter = emitter
+    connection.publisherListeners = [{ extendedId: publisherId }]
+    connection.consumerListeners = [{ extendedId: consumerId }]
+    emitter.once(`close_publisher_${publisherId}`, () => publisherCloses++)
+    emitter.once(`close_consumer_${consumerId}`, () => consumerCloses++)
+
+    connection.unregisterForClosePublisher(publisherId)
+    connection.unregisterForCloseConsumer(consumerId)
+    emitter.emit(`close_publisher_${publisherId}`)
+    emitter.emit(`close_consumer_${consumerId}`)
+
+    expect(connection.publisherListeners).to.deep.equal([])
+    expect(connection.consumerListeners).to.deep.equal([])
+    expect(publisherCloses).to.equal(0)
+    expect(consumerCloses).to.equal(0)
   })
 })
 
