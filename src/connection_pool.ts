@@ -57,14 +57,10 @@ export class ConnectionPool {
   }
 
   private removeCachedConnection(connection: Connection) {
-    const { leader, streamName, hostname: host, vhost } = connection
-    if (streamName === undefined) return
-    const entityType = leader ? "publisher" : "consumer"
-    const k = this.getCacheKey(streamName, vhost, host, entityType)
-    const mappedClientList = this.connectionsMap.get(k)
-    if (mappedClientList) {
-      const filtered = mappedClientList.filter((c) => c !== connection)
-      this.connectionsMap.set(k, filtered)
+    for (const [key, cached] of this.connectionsMap) {
+      const filtered = cached.filter((candidate) => candidate !== connection)
+      if (filtered.length === 0) this.connectionsMap.delete(key)
+      else if (filtered.length !== cached.length) this.connectionsMap.set(key, filtered)
     }
   }
 

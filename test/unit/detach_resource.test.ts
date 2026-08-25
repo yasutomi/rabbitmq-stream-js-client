@@ -2,6 +2,7 @@ import { expect } from "chai"
 import EventEmitter from "events"
 import { Client } from "../../src"
 import { Connection } from "../../src/connection"
+import { ConnectionPool } from "../../src/connection_pool"
 import { StreamConsumer, type Consumer } from "../../src/consumer"
 import { StreamPublisher, type Publisher } from "../../src/publisher"
 
@@ -180,6 +181,27 @@ describe("Stream resource close", () => {
 
     expect(released.count).to.equal(1)
     expect(freedConsumerIds.count).to.equal(1)
+  })
+})
+
+describe("ConnectionPool release", () => {
+  it("removes a released connection from its actual cache entry", async () => {
+    const pool = new ConnectionPool({ warn: () => undefined } as never)
+    const connection = {
+      decrRefCount: () => undefined,
+      ready: false,
+      refCount: 0,
+    } as unknown as Connection
+    const connectionsMap = (
+      pool as unknown as {
+        connectionsMap: Map<string, Connection[]>
+      }
+    ).connectionsMap
+    connectionsMap.set("stream@/@node@publisher", [connection])
+
+    await pool.releaseConnection(connection)
+
+    expect(connectionsMap.has("stream@/@node@publisher")).to.equal(false)
   })
 })
 
