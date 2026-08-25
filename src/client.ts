@@ -174,15 +174,21 @@ export class Client {
    */
   public async close(params: ClosingParams = { closingCode: 0, closingReason: "" }) {
     this.logger.info(`${this.id} Closing client...`)
+    const failures: unknown[] = []
     if (this.publisherCounts()) {
       this.logger.info(`Stopping all producers...`)
-      await this.closeAllPublishers()
+      failures.push(...(await this.closeAllPublishers()))
     }
     if (this.consumerCounts()) {
       this.logger.info(`Stopping all consumers...`)
-      await this.closeAllConsumers()
+      failures.push(...(await this.closeAllConsumers()))
     }
-    await this.locatorConnection.close({ ...params, manuallyClose: true })
+    try {
+      await this.locatorConnection.close({ ...params, manuallyClose: true })
+    } catch (error) {
+      failures.push(error)
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "Failed to close RabbitMQ stream client")
   }
 
   /**
@@ -466,14 +472,14 @@ export class Client {
     return this.locatorConnection.queryOffset(params)
   }
 
-  private async closeAllConsumers() {
+  private async closeAllConsumers(): Promise<unknown[]> {
     const consumers = [...this.consumers.values()].map(({ consumer }) => consumer)
-    await Promise.allSettled(consumers.map((consumer) => this.detachConsumer(consumer)))
+    return rejectionReasons(await Promise.allSettled(consumers.map((consumer) => this.detachConsumer(consumer))))
   }
 
-  private async closeAllPublishers() {
+  private async closeAllPublishers(): Promise<unknown[]> {
     const publishers = [...this.publishers.values()].map(({ publisher }) => publisher)
-    await Promise.allSettled(publishers.map((publisher) => this.detachPublisher(publisher)))
+    return rejectionReasons(await Promise.allSettled(publishers.map((publisher) => this.detachPublisher(publisher))))
   }
 
   public consumerCounts() {
@@ -1218,6 +1224,12 @@ export interface QueryPartitionsParams {
  */
 export function connect(params: ClientParams, logger?: Logger): Promise<Client> {
   return Client.connect(params, logger)
+}
+
+function rejectionReasons(results: PromiseSettledResult<unknown>[]): unknown[] {
+  return results
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => result.reason)
 }
 
 const chooseNode = (metadata: { leader?: Broker; replicas?: Broker[] }, leader: boolean): Broker | undefined => {
