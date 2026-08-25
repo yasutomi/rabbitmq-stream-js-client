@@ -467,13 +467,13 @@ export class Client {
   }
 
   private async closeAllConsumers() {
-    await Promise.all([...this.consumers.values()].map(({ consumer }) => consumer.close()))
-    this.consumers = new Map<string, ConsumerMappedValue>()
+    const consumers = [...this.consumers.values()].map(({ consumer }) => consumer)
+    await Promise.allSettled(consumers.map((consumer) => this.detachConsumer(consumer)))
   }
 
   private async closeAllPublishers() {
-    await Promise.all([...this.publishers.values()].map((c) => c.publisher.close()))
-    this.publishers = new Map<string, PublisherMappedValue>()
+    const publishers = [...this.publishers.values()].map(({ publisher }) => publisher)
+    await Promise.allSettled(publishers.map((publisher) => this.detachPublisher(publisher)))
   }
 
   public consumerCounts() {
