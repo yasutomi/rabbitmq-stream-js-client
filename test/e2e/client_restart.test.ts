@@ -87,6 +87,19 @@ describe("restart connections", () => {
     }, 10000)
   }).timeout(20000)
 
+  it("detached publishers and consumers are not redeclared during restart", async () => {
+    const publisher = await client.declarePublisher({ stream: streamName })
+    const consumer = await client.declareConsumer({ stream: streamName, offset: Offset.first() }, () => undefined)
+
+    const restarting = client.restart()
+    await client.detachPublisher(publisher)
+    await client.detachConsumer(consumer)
+    await restarting
+
+    expect(client.publisherCounts()).eql(0)
+    expect(client.consumerCounts()).eql(0)
+  }).timeout(10000)
+
   it("sending and receiving messages is not affected", async () => {
     const received = new Set<string>()
     const messageNumber = 10000
