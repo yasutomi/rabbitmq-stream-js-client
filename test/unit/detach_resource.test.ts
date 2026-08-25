@@ -168,6 +168,36 @@ describe("Stream resource close", () => {
     expect(freedPublisherIds.count).to.equal(1)
   })
 
+  it("releases locally without waiting for an earlier graceful flush", async () => {
+    const { connection, pool, released, freedPublisherIds } = closeDependencies()
+    const publisher = new StreamPublisher(
+      pool,
+      {
+        connection,
+        logger: {
+          debug: () => undefined,
+          error: () => undefined,
+          info: () => undefined,
+          warn: () => undefined,
+        },
+        maxFrameSize: 0,
+        publisherId: 1,
+        stream: "stream",
+      },
+      0n
+    )
+    const flush = deferred<void>()
+    publisher.flush = () => flush.promise.then(() => true)
+
+    const graceful = publisher.close()
+    await publisher.localClose()
+
+    expect(released.count).to.equal(1)
+    expect(freedPublisherIds.count).to.equal(1)
+    flush.resolve()
+    await graceful
+  })
+
   it("releases consumer IDs and pooled connections once across concurrent close paths", async () => {
     const { connection, pool, released, freedConsumerIds } = closeDependencies()
     const consumer = new StreamConsumer(pool, () => undefined, {

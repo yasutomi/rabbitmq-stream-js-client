@@ -272,7 +272,8 @@ export class StreamPublisher implements Publisher {
   private logger: Logger
   private maxChunkLength: number
   private _closed = false
-  private closePromise?: Promise<void>
+  private gracefulClosePromise?: Promise<void>
+  private releasePromise?: Promise<void>
 
   constructor(
     private pool: ConnectionPool,
@@ -381,43 +382,48 @@ export class StreamPublisher implements Publisher {
   }
 
   public close(): Promise<void> {
-    return (this.closePromise ??= this.closeInternal(true))
+    this._closed = true
+    return (this.gracefulClosePromise ??= this.flushThenRelease(true))
   }
 
   public automaticClose(): Promise<void> {
-    return (this.closePromise ??= this.closeInternal(false))
+    this._closed = true
+    return (this.gracefulClosePromise ??= this.flushThenRelease(false))
   }
 
   /** Releases this publisher locally without flushing a possibly disconnected socket. */
   public localClose(): Promise<void> {
-    return (this.closePromise ??= this.closeInternal(true, false))
+    this._closed = true
+    return this.releaseLocally(true)
   }
 
-  private async closeInternal(
-    releaseConnection: boolean,
-    flush = true,
-  ): Promise<void> {
-    const wasClosed = this._closed
-    this._closed = true
-    if (!wasClosed) {
-      const failures: unknown[] = []
-      if (flush)
-        try {
-          await this.flush()
-        } catch (cause) {
-          failures.push(cause)
-        }
-      try {
-        await this.pool.releaseConnection(this.connection, releaseConnection)
-      } catch (cause) {
-        failures.push(cause)
-      } finally {
-        this.connection.freePublisherId(this.publisherId)
-      }
-      if (failures.length === 1) throw failures[0]
-      if (failures.length > 1) {
-        throw new AggregateError(failures, "Failed to close Stream publisher")
-      }
+  private async flushThenRelease(releaseConnection: boolean): Promise<void> {
+    const failures: unknown[] = []
+    try {
+      await this.flush()
+    } catch (cause) {
+      failures.push(cause)
+    }
+    try {
+      await this.releaseLocally(releaseConnection)
+    } catch (cause) {
+      failures.push(cause)
+    }
+    if (failures.length === 1) throw failures[0]
+    if (failures.length > 1) {
+      throw new AggregateError(failures, "Failed to close Stream publisher")
+    }
+  }
+
+  private releaseLocally(releaseConnection: boolean): Promise<void> {
+    return (this.releasePromise ??= this.releaseInternal(releaseConnection))
+  }
+
+  private async releaseInternal(releaseConnection: boolean): Promise<void> {
+    try {
+      await this.pool.releaseConnection(this.connection, releaseConnection)
+    } finally {
+      this.connection.freePublisherId(this.publisherId)
     }
   }
 
