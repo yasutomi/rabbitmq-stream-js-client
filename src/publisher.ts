@@ -388,16 +388,25 @@ export class StreamPublisher implements Publisher {
     return (this.closePromise ??= this.closeInternal(false))
   }
 
-  private async closeInternal(releaseConnection: boolean): Promise<void> {
+  /** Releases this publisher locally without flushing a possibly disconnected socket. */
+  public localClose(): Promise<void> {
+    return (this.closePromise ??= this.closeInternal(true, false))
+  }
+
+  private async closeInternal(
+    releaseConnection: boolean,
+    flush = true,
+  ): Promise<void> {
     const wasClosed = this._closed
     this._closed = true
     if (!wasClosed) {
       const failures: unknown[] = []
-      try {
-        await this.flush()
-      } catch (cause) {
-        failures.push(cause)
-      }
+      if (flush)
+        try {
+          await this.flush()
+        } catch (cause) {
+          failures.push(cause)
+        }
       try {
         await this.pool.releaseConnection(this.connection, releaseConnection)
       } catch (cause) {

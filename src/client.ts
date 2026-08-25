@@ -307,7 +307,7 @@ export class Client {
     }
     return automatic
       ? (publisher as Publisher & { automaticClose(): Promise<void> }).automaticClose()
-      : publisher.close()
+      : (publisher as Publisher & { localClose?: () => Promise<void> }).localClose?.() ?? publisher.close()
   }
 
   /**
