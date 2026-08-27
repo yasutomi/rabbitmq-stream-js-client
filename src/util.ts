@@ -49,6 +49,7 @@ export const wait = async (ms: number) => {
 }
 
 export const ResponseCode = {
+  InternalError: 15,
   StreamDoesNotExist: 2,
   SubscriptionIdDoesNotExist: 4,
   NoOffset: 19,

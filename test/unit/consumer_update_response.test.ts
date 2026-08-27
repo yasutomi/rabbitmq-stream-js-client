@@ -13,6 +13,17 @@ describe("ConsumerUpdateResponse", () => {
     expect(bytes.subarray(-2)).eql(Buffer.from([0, 0]))
   })
 
+  it("encodes a listener failure as InternalError with OffsetType=0", () => {
+    const bytes = new ConsumerUpdateResponse({
+      correlationId: 1,
+      responseCode: 15,
+      offset: Offset.none(),
+    }).toBuffer()
+
+    expect(bytes.readUInt16BE(bytes.length - 4)).eql(15)
+    expect(bytes.subarray(-2)).eql(Buffer.from([0, 0]))
+  })
+
   it("encodes an active numeric response with OffsetType=4 and its UINT64", () => {
     const bytes = new ConsumerUpdateResponse({
       correlationId: 1,
