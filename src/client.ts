@@ -879,22 +879,28 @@ export class Client {
         this.logger.error(`On consumer_update_query no consumer found`)
         return
       }
+      let responseToSend: ConsumerUpdateResponse
       try {
         const offset = await this.getConsumerOrServerSavedOffset(consumer, response.active === 1)
         if (offset) consumer.updateConsumerOffset(offset)
         this.logger.debug(`on consumer_update_query -> ${consumer.consumerRef}`)
-        await connection.send(
-          new ConsumerUpdateResponse({ correlationId: response.correlationId, responseCode: 1, offset: offset ?? Offset.none() })
-        )
+        responseToSend = new ConsumerUpdateResponse({
+          correlationId: response.correlationId,
+          responseCode: 1,
+          offset: offset ?? Offset.none(),
+        })
       } catch (cause) {
         this.logger.error(`Error in consumerUpdateListener for consumerRef ${consumer.consumerRef}: ${(cause as Error).message}`)
-        await connection.send(
-          new ConsumerUpdateResponse({
-            correlationId: response.correlationId,
-            responseCode: ResponseCode.InternalError,
-            offset: Offset.none(),
-          })
-        )
+        responseToSend = new ConsumerUpdateResponse({
+          correlationId: response.correlationId,
+          responseCode: ResponseCode.InternalError,
+          offset: Offset.none(),
+        })
+      }
+      try {
+        await connection.send(responseToSend)
+      } catch (cause) {
+        this.logger.error(`Unable to send consumer update response: ${(cause as Error).message}`)
       }
     }
   }
