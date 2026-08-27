@@ -1,7 +1,9 @@
 import { expect } from "chai"
+import { amqpEncode } from "../../src/amqp10/encoder"
 import { NoneCompression } from "../../src/compression"
 import { DecoderListenerFunc } from "../../src/decoder_listener"
 import { ResponseDecoder } from "../../src/response_decoder"
+import { DeliverResponse } from "../../src/responses/deliver_response"
 import { PeerPropertiesResponse } from "../../src/responses/peer_properties_response"
 import { Response } from "../../src/responses/response"
 import { createConsoleLog } from "../support/util"
@@ -51,6 +53,22 @@ describe("ResponseDecoder", () => {
 
     expect(mockListener.responses).lengthOf(2)
   })
+
+  it("keeps one chunk timestamp with every message decoded from a Deliver chunk", () => {
+    const chunkTimestampMs = 1_727_654_321_000
+    let delivery: DeliverResponse | undefined
+    decoder.on("deliverV1", (response) => {
+      delivery = response
+    })
+
+    decoder.add(createDeliverResponse(chunkTimestampMs, [Buffer.from("one"), Buffer.from("two")]), getCompressionBy)
+
+    expect(delivery).not.undefined
+    const response = delivery!
+    expect(response.chunkTimestampMs).eql(chunkTimestampMs)
+    expect(response.messages.map((message) => message.content)).eql([Buffer.from("one"), Buffer.from("two")])
+    expect(response.messages.map((message) => message.offset)).eql([42n, 43n])
+  })
 })
 
 function createResponse(params: { key: number; correlationId?: number; responseCode?: number }): Buffer {
@@ -71,6 +89,28 @@ function createResponse(params: { key: number; correlationId?: number; responseC
       break
   }
 
+  dataWriter.writePrefixSize()
+  return dataWriter.toBuffer()
+}
+
+function createDeliverResponse(chunkTimestampMs: number, contents: Buffer[]): Buffer {
+  const bufferSizeParams = { maxSize: 1024 }
+  const dataWriter = new BufferDataWriter(Buffer.alloc(1024), 4, bufferSizeParams)
+  dataWriter.writeUInt16(DeliverResponse.key)
+  dataWriter.writeUInt16(DeliverResponse.Version)
+  dataWriter.writeUInt8(1)
+  dataWriter.writeInt8(1)
+  dataWriter.writeInt8(0)
+  dataWriter.writeUInt16(contents.length)
+  dataWriter.writeUInt32(contents.length)
+  dataWriter.writeInt64(BigInt(chunkTimestampMs))
+  dataWriter.writeUInt64(1n)
+  dataWriter.writeUInt64(42n)
+  dataWriter.writeInt32(0)
+  dataWriter.writeUInt32(0)
+  dataWriter.writeUInt32(0)
+  dataWriter.writeUInt32(0)
+  for (const content of contents) amqpEncode(dataWriter, { content })
   dataWriter.writePrefixSize()
   return dataWriter.toBuffer()
 }
