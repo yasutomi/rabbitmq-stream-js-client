@@ -54,6 +54,7 @@ export interface RawDeliverResponse {
   key: 0x0008
   version: number
   subscriptionId: number
+  chunkTimestampMs: number
   messages: Message[]
 }
 
@@ -63,6 +64,7 @@ export interface RawDeliverResponseV2 {
   version: number
   subscriptionId: number
   committedChunkId: bigint
+  chunkTimestampMs: number
   messages: Message[]
 }
 

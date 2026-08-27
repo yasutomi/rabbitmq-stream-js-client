@@ -81,6 +81,7 @@ export type ConsumerUpdateQueryListener = (metadata: ConsumerUpdateQuery) => voi
 type DeliveryResponseDecoded = {
   subscriptionId: number
   committedChunkId?: bigint
+  chunkTimestampMs: number
   messages: Message[]
 }
 
@@ -121,7 +122,7 @@ function decodeResponse(
   const key = dataResponse.readUInt16()
   const version = dataResponse.readUInt16()
   if (key === DeliverResponse.key) {
-    const { subscriptionId, committedChunkId, messages } = decodeDeliverResponse(
+  const { subscriptionId, committedChunkId, chunkTimestampMs, messages } = decodeDeliverResponse(
       dataResponse,
       getCompressionBy,
       logger,
@@ -133,6 +134,7 @@ function decodeResponse(
       version,
       subscriptionId,
       committedChunkId,
+      chunkTimestampMs,
       messages,
     }
   }
@@ -250,7 +252,7 @@ function decodeDeliverResponse(
     messages.push(...decodeSubEntries(dataResponse, compression, logger))
   }
 
-  return { subscriptionId, committedChunkId, messages }
+  return { subscriptionId, committedChunkId, chunkTimestampMs: Number(timestamp), messages }
 }
 
 const EmptyBuffer = Buffer.from("")

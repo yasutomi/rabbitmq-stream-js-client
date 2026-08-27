@@ -85,6 +85,7 @@ type PublisherMappedValue = {
 }
 
 type DeliverData = {
+  chunkTimestampMs: number
   messages: Message[]
   messageFilteringSupported: boolean
   subscriptionId: number
@@ -779,6 +780,7 @@ export class Client {
   private getDeliverV1Callback(connectionId: string) {
     return async (response: DeliverResponse) => {
       const deliverData = {
+        chunkTimestampMs: response.chunkTimestampMs,
         messages: response.messages,
         subscriptionId: response.subscriptionId,
         consumerId: computeExtendedConsumerId(response.subscriptionId, connectionId),
@@ -791,6 +793,7 @@ export class Client {
   private getDeliverV2Callback(connectionId: string) {
     return async (response: DeliverResponseV2) => {
       const deliverData = {
+        chunkTimestampMs: response.chunkTimestampMs,
         messages: response.messages,
         subscriptionId: response.subscriptionId,
         consumerId: computeExtendedConsumerId(response.subscriptionId, connectionId),
@@ -801,7 +804,7 @@ export class Client {
   }
 
   private handleDelivery = async (deliverData: DeliverData) => {
-    const { messages, subscriptionId, consumerId, messageFilteringSupported } = deliverData
+    const { chunkTimestampMs, messages, subscriptionId, consumerId, messageFilteringSupported } = deliverData
     const { consumer, connection } = this.consumers.get(consumerId) ?? {
       consumer: undefined,
       connection: undefined,
@@ -825,7 +828,13 @@ export class Client {
 
     for (const message of messages) {
       if (messageFilter(message)) {
-        await consumer.handle(message)
+        if (message.offset === undefined) {
+          throw new Error("Deliver chunk message is missing its offset")
+        }
+        await consumer.handle(message, {
+          chunkTimestampMs,
+          offset: message.offset,
+        })
       }
     }
 

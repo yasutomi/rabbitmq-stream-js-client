@@ -8,7 +8,15 @@ import { Offset } from "./requests/subscribe_request"
 /**
  * Message handler function for processing consumed messages
  */
-export type ConsumerFunc = (message: Message) => Promise<void> | void
+export type StreamDeliveryContext = {
+  readonly offset: bigint
+  readonly chunkTimestampMs: number
+}
+
+export type ConsumerFunc = (
+  message: Message,
+  context: StreamDeliveryContext,
+) => Promise<void> | void
 
 /**
  * Listener invoked when a single active consumer becomes active
@@ -197,9 +205,9 @@ export class StreamConsumer implements Consumer {
     return { host, port, id, readable, localPort, ready, vhost }
   }
 
-  public async handle(message: Message) {
+  public async handle(message: Message, context: StreamDeliveryContext) {
     if (this.closed || this.isMessageOffsetLessThanConsumers(message)) return
-    await this.consumerHandle(message)
+    await this.consumerHandle(message, context)
     this.maybeUpdateLocalOffset(message)
   }
 

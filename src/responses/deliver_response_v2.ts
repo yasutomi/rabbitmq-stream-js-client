@@ -49,6 +49,10 @@ export class DeliverResponseV2 implements Response {
     return this.response.committedChunkId
   }
 
+  get chunkTimestampMs(): number {
+    return this.response.chunkTimestampMs
+  }
+
   get messages(): Message[] {
     return this.response.messages
   }

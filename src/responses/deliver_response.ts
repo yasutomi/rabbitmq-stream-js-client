@@ -47,4 +47,8 @@ export class DeliverResponse implements Response {
   get messages(): Message[] {
     return this.response.messages
   }
+
+  get chunkTimestampMs(): number {
+    return this.response.chunkTimestampMs
+  }
 }
