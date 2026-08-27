@@ -474,6 +474,16 @@ export class Client {
     return this.locatorConnection.queryOffset(params)
   }
 
+  /**
+   * Store an offset for a named consumer reference without declaring a
+   * consumer. Offset tracking is broker-side state, not consumer lifecycle
+   * state, so recovery coordinators can advance a checkpoint before creating
+   * a subscription.
+   */
+  public storeOffset(params: StoreOffsetParams): Promise<void> {
+    return this.locatorConnection.storeOffset(params)
+  }
+
   private async closeAllConsumers(): Promise<unknown[]> {
     const consumers = [...this.consumers.values()].map(({ consumer }) => consumer)
     return rejectionReasons(await Promise.allSettled(consumers.map((consumer) => this.detachConsumer(consumer))))
