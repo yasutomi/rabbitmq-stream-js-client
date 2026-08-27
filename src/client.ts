@@ -890,15 +890,7 @@ export class Client {
 
   private async getConsumerOrServerSavedOffset(consumer: StreamConsumer, active: boolean) {
     if (consumer.isSingleActive && consumer.consumerRef && consumer.consumerUpdateListener) {
-      try {
-        const offset = await consumer.consumerUpdateListener(consumer.consumerRef, consumer.streamName, { active })
-        return offset
-      } catch (error) {
-        this.logger.error(
-          `Error in consumerUpdateListener for consumerRef ${consumer.consumerRef}: ${(error as Error).message}`
-        )
-        return consumer.offset
-      }
+      return consumer.consumerUpdateListener(consumer.consumerRef, consumer.streamName, { active })
     }
 
     return consumer.offset
