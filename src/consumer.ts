@@ -24,7 +24,12 @@ export type ConsumerFunc = (
  * Returns the offset from which the consumer should start consuming.
  * Typically used to restore the last processed offset from a database.
  */
-export type ConsumerUpdateListener = (consumerRef: string, streamName: string) => Promise<Offset>
+export type ConsumerUpdateContext = { readonly active: boolean }
+export type ConsumerUpdateListener = (
+  consumerRef: string,
+  streamName: string,
+  context: ConsumerUpdateContext,
+) => Promise<Offset | undefined>
 
 /**
  * Compute an extended consumer ID that includes the connection ID

@@ -3,6 +3,7 @@ import { AbstractRequest } from "./abstract_request"
 import { DataWriter } from "./data_writer"
 
 const OFFSET_TYPE = {
+  none: 0,
   first: 1,
   last: 2,
   next: 3,
@@ -26,6 +27,10 @@ export class Offset {
 
   static first() {
     return new Offset("first")
+  }
+
+  static none() {
+    return new Offset("none")
   }
 
   static last() {
