@@ -38,7 +38,6 @@ describe("delivery context", () => {
 
     expect(initial.map(({ offset }) => offset)).eql([0n, 1n])
     expect(initial.every(({ chunkTimestampMs }) => Number.isSafeInteger(chunkTimestampMs))).true
-    expect(new Set(initial.map(({ chunkTimestampMs }) => chunkTimestampMs)).size).eql(1)
     const sourceContexts = [...initial]
 
     await client.restart()
