@@ -1,12 +1,25 @@
 {
   "name": "@micro4/rabbitmq-stream-js-client",
-  "version": "1.1.0",
+  "version": "1.1.0-micro4.1",
   "description": "Rabbit stream client for JS/TS application",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "test": "mocha test",
     "build": "tsc",
     "prepare": "npm run build",
+    "prepack": "npm run build",
     "check": "npm run check-ts && npm run check-lint && npm run check-format && npm run check-spell",
     "check-ts": "tsc --noEmit && tsc --project test/tsconfig.json --noEmit",
     "check-lint": "tsc --noEmit && eslint 'src/**/*.ts' 'test/**/*.ts'",
@@ -16,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/coders51/rabbitmq-stream-js-client.git"
+    "url": "git+https://github.com/yasutomi/rabbitmq-stream-js-client.git#db0d1dd46ccf5839870e8be8c22f2b78efe11037"
   },
   "keywords": [
     "RabbitMQ",
@@ -28,6 +41,10 @@
     "url": "https://github.com/coders51/rabbitmq-stream-js-client/issues"
   },
   "homepage": "https://github.com/coders51/rabbitmq-stream-js-client#readme",
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "micro4SourceCommit": "db0d1dd46ccf5839870e8be8c22f2b78efe11037",
   "devDependencies": {
     "@tsconfig/node-lts": "^20.1.1",
     "@types/amqplib": "^0.10.1",
@@ -56,6 +73,7 @@
     "winston": "^3.8.2"
   },
   "dependencies": {
+    "@types/node": "^20.11.5",
     "semver": "^7.5.4"
   }
 }
